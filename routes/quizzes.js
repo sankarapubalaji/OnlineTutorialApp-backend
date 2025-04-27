@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Quiz = require('../models/Quiz');
-const { sendGeneralEmail } = require('../utils/email');
+const User = require('../models/User');
+const { sendQuizEmail } = require('../utils/email');
 
 // POST: Create a new quiz and send email to assigned students
 router.post('/', async (req, res) => {
@@ -12,6 +14,16 @@ router.post('/', async (req, res) => {
   }
 
   try {
+    const teacher = await User.findById(createdBy).select('name email');
+    if (!teacher) {
+      return res.status(404).json({ error: 'Teacher not found' });
+    }
+
+    const students = await User.find({ _id: { $in: assignedStudents } }).select('name email');
+    if (students.length !== assignedStudents.length) {
+      return res.status(404).json({ error: 'One or more students not found' });
+    }
+
     const quiz = new Quiz({
       title,
       dueDate,
@@ -21,33 +33,40 @@ router.post('/', async (req, res) => {
       createdBy,
       assignedStudents,
     });
-    await quiz.save();
+    const savedQuiz = await quiz.save();
+    console.log('Quiz saved:', savedQuiz);
 
-    // Send email to each assigned student
-    const students = assignedStudents.map(studentId => ({ id: studentId })); // Simplified for email sending
+    const emailResults = [];
     for (const student of students) {
       const subject = `New Quiz Assigned: ${title}`;
-      const message = `
-Quiz Title: ${title}
-Due Date: ${dueDate}
-Duration: ${duration} minutes
-Description: ${description}
-Quiz URL: ${quizUrl}
-
-Please complete the quiz by the due date.
-      `.trim();
-      await sendGeneralEmail(
-        student.email || 'placeholder@example.com', // Email would be fetched in a real scenario
-        subject,
-        message,
-        'Teacher Name', // Sender name (should be fetched from user)
-        'teacher',
-        'teacher@example.com', // Sender email (should be fetched)
-        'Student Name' // Recipient name (should be fetched)
-      );
+      const quizDetails = {
+        title,
+        dueDate,
+        duration,
+        description,
+        quizUrl,
+      };
+      try {
+        await sendQuizEmail(
+          student.email,
+          subject,
+          quizDetails,
+          teacher.name,
+          'teacher',
+          teacher.email,
+          student.name
+        );
+        emailResults.push({ studentId: student._id, status: 'sent', email: student.email, success: true });
+        console.log(student.name);
+      } catch (emailError) {
+        console.error(`Failed to send email to ${student.email}:`, emailError);
+        emailResults.push({ studentId: student._id, status: 'failed', error: emailError.message, email: student.email, success: false });
+      }
     }
 
-    res.status(201).json(quiz);
+    // Convert savedQuiz to a plain JavaScript object
+    const quizResponse = savedQuiz.toObject();
+    res.status(201).json({ quiz: quizResponse, emailResults });
   } catch (error) {
     console.error('Error creating quiz:', error);
     res.status(500).json({ error: 'Failed to create quiz' });
@@ -55,16 +74,38 @@ Please complete the quiz by the due date.
 });
 
 // GET: Fetch quizzes created by a teacher or assigned to a student
+// GET: Fetch quizzes created by a teacher or assigned to a student
 router.get('/', async (req, res) => {
   const { userId, role } = req.query;
+
+  if (!role) {
+    return res.status(400).json({ error: 'role is required' });
+  }
 
   try {
     let quizzes;
     if (role === 'teacher') {
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required for teacher role' });
+      }
       quizzes = await Quiz.find({ createdBy: userId }).populate('assignedStudents', 'name');
+    } else if (role === 'student') {
+      if (!userId) {
+        // Instead of throwing an error, return an empty array or a message
+        return res.status(200).json([]); // Or res.status(400).json({ error: 'userId is missing' });
+      }
+      // Ensure userId is treated as ObjectId for MongoDB query
+      const objectId = new mongoose.Types.ObjectId(userId);
+      quizzes = await Quiz.find({ assignedStudents: objectId });
     } else {
-      quizzes = await Quiz.find({ assignedStudents: userId });
+      return res.status(400).json({ error: 'Invalid role' });
     }
+
+    if (!quizzes.length) {
+      return res.status(404).json({ message: 'No quizzes found' });
+    }
+
+    console.log(`Fetched quizzes for user ${userId} (${role}):`, quizzes);
     res.status(200).json(quizzes);
   } catch (error) {
     console.error('Error fetching quizzes:', error);
