@@ -33,17 +33,10 @@ const sendGeneralEmail = async (toEmail, subject, message, senderName, senderRol
     },
   });
 
-  // Determine the role-based message
   const roleMessage = senderRole === 'teacher' ? 'New message from teacher' : 'New message from student';
-  
-  // Fallback for empty or undefined message
   const safeMessage = message && message.trim() !== '' ? message : 'No message content provided.';
-  
-  // Fallback for recipientName
-  console.log(recipientName);
   const safeRecipientName = recipientName && recipientName.trim() !== '' ? recipientName : 'user';
 
-  // Create the email template
   const mailOptions = {
     from: `"${senderName}" <${process.env.EMAIL_USER}>`,
     to: toEmail,
@@ -71,6 +64,101 @@ const sendGeneralEmail = async (toEmail, subject, message, senderName, senderRol
   }
 };
 
+const sendCourseShareEmail = async (toEmail, subject, courseDetails, senderName, senderRole, recipientEmail, recipientName) => {
+  const transporter = nodemailer.createTransport({
+    service: 'Gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  const safeRecipientName = recipientName && recipientName.trim() !== '' ? recipientName : 'user';
+  const { title, instructor, description, category, level, duration, courseUrl } = courseDetails;
+
+  const mailOptions = {
+    from: `"${senderName}" <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject: subject,
+    html: `
+      <div style="font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #f4f7fa; padding: 20px; max-width: 600px; margin: 0 auto;">
+        <!-- Header -->
+        <div style="background-color: #3b82f6; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 600;">Course Recommendation</h1>
+        </div>
+
+        <!-- Main Content -->
+        <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
+          <h2 style="color: #1e293b; font-size: 20px; font-weight: 600; margin-top: 0;">Hello, ${safeRecipientName}!</h2>
+          <p style="color: #475569; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+            ${senderName} (${senderRole}) has shared an exciting course with you!
+          </p>
+
+          <!-- Course Details -->
+          <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <h3 style="color: #1e293b; font-size: 18px; font-weight: 600; margin-top: 0;">${title}</h3>
+            <table style="width: 100%; font-size: 15px; color: #475569; margin: 10px 0;">
+              <tr>
+                <td style="padding: 5px 0; font-weight: 500;">Instructor:</td>
+                <td style="padding: 5px 0;">${instructor}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-weight: 500;">Description:</td>
+                <td style="padding: 5px 0;">${description}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-weight: 500;">Category:</td>
+                <td style="padding: 5px 0;">${category}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-weight: 500;">Level:</td>
+                <td style="padding: 5px 0;">${level}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0; font-weight: 500;">Duration:</td>
+                <td style="padding: 5px 0;">${duration}</td>
+              </tr>
+            </table>
+
+            <!-- Call to Action Button -->
+            <div style="text-align: center; margin-top: 20px;">
+              <a href="${courseUrl}" style="display: inline-block; padding: 12px 24px; background-color: #3b82f6; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 500; border-radius: 6px; transition: background-color 0.3s ease;">
+                Access Course
+              </a>
+            </div>
+            <p style="color: #64748b; font-size: 14px; text-align: center; margin-top: 10px;">
+              Or copy this link: <a href="${courseUrl}" style="color: #3b82f6; text-decoration: none;">${courseUrl}</a>
+            </p>
+          </div>
+
+          <!-- Contact Info -->
+          <p style="color: #475569; font-size: 14px; margin-top: 20px;">
+            Want to discuss this course? Reach out to ${senderName} at: 
+            <a href="mailto:${recipientEmail}" style="color: #3b82f6; text-decoration: none;">${recipientEmail}</a>
+          </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align: center; padding: 15px; margin-top: 20px; border-top: 1px solid #e2e8f0;">
+          <p style="color: #64748b; font-size: 14px; margin: 0;">
+            Best regards, <br />
+            <span style="font-weight: 500; color: #1e293b;">Tutorial Platform Team</span>
+          </p>
+        </div>
+      </div>
+    `,
+    text: `Course Recommendation\n\nDear ${safeRecipientName},\n\n${senderName} (${senderRole}) has shared an exciting course with you!\n\nCourse Title: ${title}\nInstructor: ${instructor}\nDescription: ${description}\nCategory: ${category}\nLevel: ${level}\nDuration: ${duration}\nCourse URL: ${courseUrl}\n\nWant to discuss this course? Reach out to ${senderName} at: ${recipientEmail}\n\nBest regards,\nTutorial Platform Team`,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log('Course share email sent successfully to', toEmail);
+  } catch (error) {
+    console.error('Failed to send course share email:', error.message, error.stack);
+    throw error;
+  }
+};
+
 const sendQuizEmail = async (toEmail, subject, quizDetails, senderName, senderRole, recipientEmail, recipientName) => {
   const transporter = nodemailer.createTransport({
     service: 'Gmail',
@@ -80,32 +168,23 @@ const sendQuizEmail = async (toEmail, subject, quizDetails, senderName, senderRo
     },
   });
 
-  // Fallback for recipientName
   const safeRecipientName = recipientName && recipientName.trim() !== '' ? recipientName : 'user';
-
-  // Extract quiz details
   const { title, dueDate, duration, description, quizUrl } = quizDetails;
 
-  // Create the email template with a modern, interactive design
   const mailOptions = {
     from: `"${senderName}" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: subject,
     html: `
       <div style="font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #f4f7fa; padding: 20px; max-width: 600px; margin: 0 auto;">
-        <!-- Header -->
         <div style="background-color: #3b82f6; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
           <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 600;">New Quiz Assigned</h1>
         </div>
-
-        <!-- Main Content -->
         <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
           <h2 style="color: #1e293b; font-size: 20px; font-weight: 600; margin-top: 0;">Hello, ${safeRecipientName}!</h2>
           <p style="color: #475569; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
             You have a new quiz assigned by <strong>${senderName}</strong> (${senderRole}).
           </p>
-
-          <!-- Quiz Details -->
           <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
             <h3 style="color: #1e293b; font-size: 18px; font-weight: 600; margin-top: 0;">${title}</h3>
             <table style="width: 100%; font-size: 15px; color: #475569; margin: 10px 0;">
@@ -122,8 +201,6 @@ const sendQuizEmail = async (toEmail, subject, quizDetails, senderName, senderRo
                 <td style="padding: 5px 0;">${description}</td>
               </tr>
             </table>
-
-            <!-- Call to Action Button -->
             <div style="text-align: center; margin-top: 20px;">
               <a href="${quizUrl}" style="display: inline-block; padding: 12px 24px; background-color: #3b82f6; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 500; border-radius: 6px; transition: background-color 0.3s ease;">
                 Take Quiz Now
@@ -133,15 +210,11 @@ const sendQuizEmail = async (toEmail, subject, quizDetails, senderName, senderRo
               Or copy this link: <a href="${quizUrl}" style="color: #3b82f6; text-decoration: none;">${quizUrl}</a>
             </p>
           </div>
-
-          <!-- Contact Info -->
           <p style="color: #475569; font-size: 14px; margin-top: 20px;">
             Need help? Reach out to ${senderName} at: 
             <a href="mailto:${recipientEmail}" style="color: #3b82f6; text-decoration: none;">${recipientEmail}</a>
           </p>
         </div>
-
-        <!-- Footer -->
         <div style="text-align: center; padding: 15px; margin-top: 20px; border-top: 1px solid #e2e8f0;">
           <p style="color: #64748b; font-size: 14px; margin: 0;">
             Best regards, <br />
@@ -162,4 +235,4 @@ const sendQuizEmail = async (toEmail, subject, quizDetails, senderName, senderRo
   }
 };
 
-module.exports = { sendVerificationEmail, sendGeneralEmail, sendQuizEmail };
+module.exports = { sendVerificationEmail, sendGeneralEmail, sendQuizEmail, sendCourseShareEmail };
